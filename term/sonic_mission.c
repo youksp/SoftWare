@@ -11,7 +11,7 @@
 #define TRIG_PINN2 26
 #define ECHO_PINN2 21
 
-void trigger(void);
+//void trigger(void);
 void cb_func_echo0(int pi, unsigned gpio, unsigned level, uint32_t tick);
 void cb_func_echo1(int pi, unsigned gpio, unsigned level, uint32_t tick);
 void cb_func_echo2(int pi, unsigned gpio, unsigned level, uint32_t tick);

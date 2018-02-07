@@ -10,7 +10,7 @@
 #define INPUT4 27
 
 #define PWM_PIN0 23
-#define PWM_PIN0 24
+#define PWM_PIN1 24
 
 
 int pi;
@@ -27,7 +27,7 @@ void Motor_Init()
     usleep(10);
 }
 
-void Motor_Forword()
+void Motor_Right()
 {
      gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
     gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
@@ -38,7 +38,7 @@ void Motor_Forword()
 
 }
 
-void Motor_Backword()
+void Motor_Left()
 {
      gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
     gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
@@ -49,7 +49,7 @@ void Motor_Backword()
 
 }
 
-void Motor_Left()
+void Motor_Backword()
 {
      gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
     gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
@@ -60,7 +60,7 @@ void Motor_Left()
 
 }
 
-void Motor_Right()
+void Motor_Forword()
 {
      gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
     gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
@@ -78,20 +78,6 @@ void Motor_stop()
     usleep(10);
 }
 
-void Motor_Driving(int left, int right)
-{
-
-    gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
-    gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
-    usleep(10);
-
-    set_PWM_dutycycle(pi, PWM_PIN0, left);
-    set_PWM_dutycycle(pi, PWM_PIN1, right);
- 
-    gpio_write(pi, INPUT1, PI_HIGH);     gpio_write(pi, INPUT2, PI_LOW);
-    gpio_write(pi, INPUT3, PI_HIGH);     gpio_write(pi, INPUT4, PI_LOW);
-
-}
 
 void PWM_Init()
 {
@@ -158,7 +144,8 @@ int main(void)
     }
     /*******************************/
 
-    set_PWM_dutycycle(pi, PWM_PIN, 0);
+    set_PWM_dutycycle(pi, PWM_PIN0, 0);
+    set_PWM_dutycycle(pi, PWM_PIN1, 0);
     pigpio_stop(pi);
     tcsetattr(0, TCSANOW, &oldtio);
     return 0;

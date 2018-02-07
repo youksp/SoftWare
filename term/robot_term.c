@@ -114,14 +114,15 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
     
     //controller
     if(error >= 0){
-        left_end = ref_speed - kp*error - kd*(error - pre_error); 
+        left_end = ref_speed - ref_speed*(kp*error + kd*(error - pre_error))/100.0; 
         right_end = ref_speed;
     }
     else{
         left_end = ref_speed;
-        right_end = ref_speed + kp*error + kd*(error - pre_error);
+        right_end = ref_speed + ref_speed*(kp*error + kd*(error - pre_error))/100.0;
     }
     printf("M_L : %d, M_R : %d\n",left_end,right_end);
+
     pre_error = error;
 }
 
@@ -174,6 +175,8 @@ void global_Init()
     set_PWM_dutycycle(pi, control_cycle_PIN, 1);
 
     //pwm range 1000
+    set_PWM_frequency(pi, PWM_PIN0, 2000);
+    set_PWM_frequency(pi, PWM_PIN1, 2000);
     set_PWM_range(pi, PWM_PIN0, 100);
     set_PWM_range(pi, PWM_PIN1, 100);
     set_PWM_dutycycle(pi, PWM_PIN0, 0);
@@ -206,6 +209,8 @@ void cb_func_echo0(int pi, unsigned gpio, unsigned level, uint32_t tick)
         start_tick_[0] = tick;
     else if(level == PI_LOW)
         dist_tick_[0] = tick - start_tick_[0];
+
+    printf("echo0");
 }
 void cb_func_echo1(int pi, unsigned gpio, unsigned level, uint32_t tick)
 {
@@ -213,6 +218,7 @@ void cb_func_echo1(int pi, unsigned gpio, unsigned level, uint32_t tick)
         start_tick_[1] = tick;
     else if(level == PI_LOW)
         dist_tick_[1] = tick - start_tick_[1];
+    printf("echo1");
 }
 void cb_func_echo2(int pi, unsigned gpio, unsigned level, uint32_t tick)
 {
@@ -220,6 +226,7 @@ void cb_func_echo2(int pi, unsigned gpio, unsigned level, uint32_t tick)
         start_tick_[2] = tick;
     else if(level == PI_LOW)
         dist_tick_[2] = tick - start_tick_[2];
+    printf("echo2");
 }
 
 
@@ -294,7 +301,7 @@ void senser()
         sensor_L = dist_tick_[0] / 1000000. * 340 / 2 * 100;
     }
     else
-        sensor_L = 4;
+        sensor_L = -1;
     
     if(dist_tick_[1] && start_tick_[1]){
         sensor_F = dist_tick_[1] / 1000000. * 340 / 2 * 100;
