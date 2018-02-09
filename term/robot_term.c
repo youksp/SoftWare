@@ -24,7 +24,7 @@
 #define ECHO_PINN2 21
 
 #define control_cycle_PIN 12
-
+#define speed_limit 350
 
 //-----------------------------------------------------
 //                      global var
@@ -148,7 +148,10 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
         error_R = ref_sensor - s_save_R - 0.2;
         error_F = ref_sensor_F - s_save_F;
         if(error_F < 0) error_F = 0; // 정면은 설정거리부터 감속하기위해 음수 삭제
-        
+       
+
+
+        //확꺽어지지 안도록 제어값 제한 둬보기
 /*  
         //controller left look 왼쪽 거리를 맞추며 전진하는 제어
         if(error_L >= 0){
@@ -177,8 +180,8 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
             right_end = ref_speed - ref_speed*kp_f*error_F/100.0;
             if(right_end < 0) 
                 right_end = 0;
-            if(left_end < 0) 
-                left_end = 0;
+            if(left_end < speed_limit - ref_speed*kp_f*error_F/100.0)    //회전 속도 감속 제한 
+                left_end = speed_limit - ref_speed*kp_f*error_F/100.0;
 
         }
         else{
@@ -186,8 +189,8 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
             right_end = ref_speed + ref_speed*(kp_r*error_R + kd_r*(error_R - pre_error_R))/100.0 - ref_speed*kp_f*error_F/100.0;
             if(left_end < 0)
                 left_end = 0;
-            if(right_end < 0)
-                right_end = 0;
+            if(right_end < speed_limit - ref_speed*kp_f*error_F/100.0)   //회전 속도 감속 제한
+                right_end = speed_limit - ref_speed*kp_f*error_F/100.0;
 
         }
         
