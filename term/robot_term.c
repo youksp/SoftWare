@@ -31,36 +31,38 @@
 //-----------------------------------------------------
 int pi;
 
-int ref_speed   =  0;
-int spin_speed  =  35;
-int left_end    =  0;
-int right_end   =  0;
+int ref_speed   =  0;   //설정속도
+int spin_speed  =  35;  //회전속도
+int left_end    =  0;   //왼쪽 모터 pwm값
+int right_end   =  0;   //오른쪽 모터 pwm값
 
-int c_flag      =  0;
+int c_flag      =  0;   //좌수법 알고리즘에 의한 현재상황 플래그
 
 uint32_t start_tick_[3], dist_tick_[3];
-float sensor_L, sensor_F, sensor_R;
+float sensor_L, sensor_F, sensor_R; //현재 거리값
+float s_save_L, s_save_F, s_save_R; //사용되는 거리값
 
 float error_L = 0;
 float error_R = 0;
 float error_F = 0;
 
-float kp = 10.5;
+float kp = 10.5;    //왼쪽 모터 게인값
 float kd = 2;
 
-float kp_r = 9;
+float kp_r = 9;     //오른쪽 모터 게인값
 float kd_r = 10;
 
-float kp_f = 8;
+float kp_f = 8;     //정면 게인값
 
-float pre_error_L = 0;
+float pre_error_L = 0;  //
 float pre_error_R = 0;
 
 
-float ref_sensor = 5.2;
-float ref_sensor_F = 15;
+float ref_sensor = 5.2;     //좌, 우 이격 전진 거리
+float ref_sensor_F = 15;    //정면 벽 감지 감속 시작 지점
 
-
+int ns_l, ns_f, ns_r;       //벽 감지 상태 저장 변수
+ 
 //-----------------------------------------------------
 //                  function set
 //-----------------------------------------------------
@@ -86,14 +88,18 @@ void* sensor(void* arg );
 //-----------------------------------------------------
 int main(int argc, char* argv[])
 {
-    if(argc == 2) ref_speed = 10 * atoi(argv[1]);
+    if(argc == 2) ref_speed = 10 * atoi(argv[1]); //out 파일 실행시 기준 속도 입력
     else{
         printf("./a.out [reference speed]\n");
         return -1;
     }
-    global_Init();
-    Motor_Init();
 
+    global_Init(); //pigipio demon, sona, pwm init
+    Motor_Init(); //motor pin init
+
+
+
+    //초음파 센서를 위한 callback함수 실행
     callback(pi, ECHO_PINN0, EITHER_EDGE, cb_func_echo0);
     gpio_write(pi, TRIG_PINN0, PI_OFF);
 
@@ -105,13 +111,14 @@ int main(int argc, char* argv[])
 
     //time_sleep(1);
 
+    //초음파 센서를 받는 함수 스레드 실행
     start_thread(sensor,(void *)0);
+
+    //50ms제어주기의 callback함수 실행
     callback(pi,control_cycle_PIN, RISING_EDGE, cb_control);
     time_sleep(100);
 
     //start_thread(sensor,(void *)0);
-
-
 
     while(1);
 
@@ -125,17 +132,25 @@ int main(int argc, char* argv[])
 //----------------------------------------------------
 void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어주기 50ms
 {
-//    if((sensor_L > 0) && (sensor_F > 0))
-//    {
+    if((sensor_L > 0) && (sensor_F > 0) && (sensor_R > 0))
+    {
+        s_save_L = sensor_L;
+        s_save_F = sensor_F;
+        s_save_R = sensor_R;
+    }
+
 
         printf("sensor_L : %.2f, sensor_F : %.2f, sensor_R : %.2f\n",sensor_L, sensor_F, sensor_R);
-        error_L = ref_sensor - sensor_L;
-        error_R = ref_sensor - sensor_R - 0.2;
-        error_F = ref_sensor_F - sensor_F;
-        if(error_F < 0) error_F = 0;
+
+
+        //원하는 거리값을 맞추기위해 (설정거리 - 현재거리) 에러값 생성 
+        error_L = ref_sensor - s_save_L;
+        error_R = ref_sensor - s_save_R - 0.2;
+        error_F = ref_sensor_F - s_save_F;
+        if(error_F < 0) error_F = 0; // 정면은 설정거리부터 감속하기위해 음수 삭제
         
 /*  
-        //controller left look
+        //controller left look 왼쪽 거리를 맞추며 전진하는 제어
         if(error_L >= 0){
             right_end = ref_speed - ref_speed*(kp*error_L + kd*(error_L - pre_error_L))/100.0 - ref_speed*kp_f*error_F/100.0; 
             left_end = ref_speed - ref_speed*kp_f*error_F/100.0;
@@ -156,7 +171,7 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
         }
 */
         
-        //controller right look
+        //controller right look 오른쪽 거리를 맞추며 전진하는 제어
         if(error_R >= 0){
             left_end = ref_speed - ref_speed*(kp_r*error_R + kd_r*(error_R - pre_error_R))/100.0 - ref_speed*kp_f*error_F/100.0; 
             right_end = ref_speed - ref_speed*kp_f*error_F/100.0;
@@ -186,13 +201,15 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
         pre_error_R = error_R;
 
     
-//    }
+
 }
 
 
 int control_flag(float s_l, float s_f, float s_r) //왼쪽, 정면, 오른쪽(좌수법 알고리즘)
 {
-    // 1 = 벽, 0 = 빈공간
+    // 좌수법 알고리즘
+    
+    // 1 = 벽, 0 = 빈공간  12cm 이상이 측정되면 벽이아닌 비어있는 것으로 가정한다.
     if(s_l > 12)
         s_l = 0;
     else
@@ -208,8 +225,11 @@ int control_flag(float s_l, float s_f, float s_r) //왼쪽, 정면, 오른쪽(�
     else
         s_r = 1;
 
-    if((s_l == 0)&&(s_l == 0)&&(s_l == 0)){
 
+
+
+    if((s_l == 0)&&(s_l == 0)&&(s_l == 0)){
+        
     }
     else if((s_l == 0)&&(s_l == 0)&&(s_l == 0)){
 
@@ -218,9 +238,12 @@ int control_flag(float s_l, float s_f, float s_r) //왼쪽, 정면, 오른쪽(�
 
 
 
-
-
-    return 0;
+    //다음 제어에 현재상태를 비교하기 위해 현재 상태를 저장한다.
+    ns_l = s_l;
+    ns_f = s_f;
+    ns_r = s_r;
+  
+      return 0;
 }
 
 //-----------------------------------------------------
