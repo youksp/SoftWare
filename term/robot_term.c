@@ -41,11 +41,24 @@ int c_flag      =  0;
 uint32_t start_tick_[3], dist_tick_[3];
 float sensor_L, sensor_F, sensor_R;
 
-float error = 0;
-float kp = 10;
-float kd = 1;
-float pre_error = 0;
-float ref_sensor = 4;
+float error_L = 0;
+float error_R = 0;
+float error_F = 0;
+
+float kp = 10.5;
+float kd = 2;
+
+float kp_r = 9;
+float kd_r = 10;
+
+float kp_f = 8;
+
+float pre_error_L = 0;
+float pre_error_R = 0;
+
+
+float ref_sensor = 5.2;
+float ref_sensor_F = 15;
 
 
 //-----------------------------------------------------
@@ -73,7 +86,7 @@ void* sensor(void* arg );
 //-----------------------------------------------------
 int main(int argc, char* argv[])
 {
-    if(argc == 2) ref_speed = atoi(argv[1]);
+    if(argc == 2) ref_speed = 10 * atoi(argv[1]);
     else{
         printf("./a.out [reference speed]\n");
         return -1;
@@ -112,28 +125,68 @@ int main(int argc, char* argv[])
 //----------------------------------------------------
 void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어주기 50ms
 {
-//    sensor();
+//    if((sensor_L > 0) && (sensor_F > 0))
+//    {
 
-//    c_flag = control_flag(sensor_L, sensor_F,sensor_R);
-    printf("sensor_L : %.2f, sensor_F : %.2f, sensor_R : %.2f\n",sensor_L, sensor_F, sensor_R);
-    error = ref_sensor - sensor_L;
+        printf("sensor_L : %.2f, sensor_F : %.2f, sensor_R : %.2f\n",sensor_L, sensor_F, sensor_R);
+        error_L = ref_sensor - sensor_L;
+        error_R = ref_sensor - sensor_R - 0.2;
+        error_F = ref_sensor_F - sensor_F;
+        if(error_F < 0) error_F = 0;
+        
+/*  
+        //controller left look
+        if(error_L >= 0){
+            right_end = ref_speed - ref_speed*(kp*error_L + kd*(error_L - pre_error_L))/100.0 - ref_speed*kp_f*error_F/100.0; 
+            left_end = ref_speed - ref_speed*kp_f*error_F/100.0;
+            if(left_end < 0) 
+                left_end = 0;
+            if(right_end < 0)
+                right_end = 0;
+
+        }
+        else{
+            right_end = ref_speed - ref_speed*kp_f*error_F/100.0;
+            left_end = ref_speed + ref_speed*(kp*error_L + kd*(error_L - pre_error_L))/100.0 - ref_speed*kp_f*error_F/100.0;
+            if(right_end < 0)
+                right_end = 0;
+            if(left_end < 0) 
+                left_end = 0;
+
+        }
+*/
+        
+        //controller right look
+        if(error_R >= 0){
+            left_end = ref_speed - ref_speed*(kp_r*error_R + kd_r*(error_R - pre_error_R))/100.0 - ref_speed*kp_f*error_F/100.0; 
+            right_end = ref_speed - ref_speed*kp_f*error_F/100.0;
+            if(right_end < 0) 
+                right_end = 0;
+            if(left_end < 0) 
+                left_end = 0;
+
+        }
+        else{
+            left_end = ref_speed - ref_speed*kp_f*error_F/100.0;
+            right_end = ref_speed + ref_speed*(kp_r*error_R + kd_r*(error_R - pre_error_R))/100.0 - ref_speed*kp_f*error_F/100.0;
+            if(left_end < 0)
+                left_end = 0;
+            if(right_end < 0)
+                right_end = 0;
+
+        }
+        
+
+        printf("M_L : %d, M_R : %d\n",left_end,right_end);
+
+
+        Motor_front(left_end,right_end);
+
+        pre_error_L = error_L;
+        pre_error_R = error_R;
+
     
-    //controller
-    if(error >= 0){
-        left_end = ref_speed - ref_speed*(kp*error + kd*(error - pre_error))/100.0; 
-        right_end = ref_speed;
-        if(left_end < 0) 
-            left_end = 0;
-    }
-    else{
-        left_end = ref_speed;
-        right_end = ref_speed + ref_speed*(kp*error + kd*(error - pre_error))/100.0;
-        if(right_end < 0)
-            right_end = 0;
-    }
-    printf("M_L : %d, M_R : %d\n",left_end,right_end);
-
-    pre_error = error;
+//    }
 }
 
 
@@ -180,15 +233,15 @@ void global_Init()
         fprintf(stderr, "%s\n",pigpio_error(pi)); exit(-1);
     }
 
-    set_PWM_frequency(pi, control_cycle_PIN, 10); // 50ms control period
+    set_PWM_frequency(pi, control_cycle_PIN, 20); // 50ms control period
     set_PWM_range(pi, control_cycle_PIN, 2);
     set_PWM_dutycycle(pi, control_cycle_PIN, 1);
 
     //pwm range 1000
-    set_PWM_frequency(pi, PWM_PIN0, 200);
-    set_PWM_frequency(pi, PWM_PIN1, 200);
-    set_PWM_range(pi, PWM_PIN0, 100);
-    set_PWM_range(pi, PWM_PIN1, 100);
+//    set_PWM_frequency(pi, PWM_PIN0, 2000);
+//    set_PWM_frequency(pi, PWM_PIN1, 2000);
+    set_PWM_range(pi, PWM_PIN0, 1000);
+    set_PWM_range(pi, PWM_PIN1, 1000);
     set_PWM_dutycycle(pi, PWM_PIN0, 0);
     set_PWM_dutycycle(pi, PWM_PIN1, 0);
 
@@ -242,9 +295,9 @@ void cb_func_echo2(int pi, unsigned gpio, unsigned level, uint32_t tick)
 
 void Motor_front(int left, int right)
 {
-    gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
-    gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
-    usleep(10);
+//    gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
+//    gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
+//    usleep(10);
 
     set_PWM_dutycycle(pi, PWM_PIN0, left);
     set_PWM_dutycycle(pi, PWM_PIN1, right);
@@ -311,24 +364,24 @@ void* sensor(void* arg)
 
     if(dist_tick_[0] && start_tick_[0]){
         sensor_L = dist_tick_[0] / 1000000. * 340 / 2 * 100;
-//        if(sensor_L < 2 || sensor_L > 400)
-//            sensor_L = - 2;
+        if(sensor_L < 2 || sensor_L > 400)
+            sensor_L = - 2;
     }
     else
         sensor_L = -1;
     
     if(dist_tick_[1] && start_tick_[1]){
         sensor_F = dist_tick_[1] / 1000000. * 340 / 2 * 100;
-//        if(sensor_F < 2 || sensor_F > 400)
-//            sensor_F = - 2;
+        if(sensor_F < 2 || sensor_F > 400)
+            sensor_F = - 2;
     }
     else
         sensor_F = -1;
     
     if(dist_tick_[2] && start_tick_[2]){
         sensor_R = dist_tick_[2] / 1000000. * 340 / 2 * 100;
-//        if(sensor_R < 2 || sensor_R > 400)
-//            sensor_R = - 2;
+        if(sensor_R < 2 || sensor_R > 400)
+            sensor_R = - 2;
     }
     else
         sensor_R = -1;
