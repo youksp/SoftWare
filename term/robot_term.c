@@ -62,7 +62,7 @@ float ref_sensor = 5.2;     //좌, 우 이격 전진 거리
 float ref_sensor_F = 15;    //정면 벽 감지 감속 시작 지점
 
 int ns_l, ns_f, ns_r;       //벽 감지 상태 저장 변수
- 
+int flag = 0; 
 //-----------------------------------------------------
 //                  function set
 //-----------------------------------------------------
@@ -151,6 +151,13 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
        
 
 
+        if(c_flag == 1) //회전운동
+        {
+
+        }
+        else if(c_flag == 2) //전진운동 왼쪽보기
+        {
+
         //확꺽어지지 안도록 제어값 제한 둬보기
 /*  
         //controller left look 왼쪽 거리를 맞추며 전진하는 제어
@@ -173,7 +180,9 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
 
         }
 */
-        
+        }
+        else if(c_flag == 3) //전진운동 오른쪽보기
+        {
         //controller right look 오른쪽 거리를 맞추며 전진하는 제어
         if(error_R >= 0){
             left_end = ref_speed - ref_speed*(kp_r*error_R + kd_r*(error_R - pre_error_R))/100.0 - ref_speed*kp_f*error_F/100.0; 
@@ -193,7 +202,7 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
                 right_end = speed_limit - ref_speed*kp_f*error_F/100.0;
 
         }
-        
+        }
 
         printf("M_L : %d, M_R : %d\n",left_end,right_end);
 
@@ -229,24 +238,54 @@ int control_flag(float s_l, float s_f, float s_r) //왼쪽, 정면, 오른쪽(�
         s_r = 1;
 
 
+    if(((ns_l != s_l) || (ns_f != s_f) || (ns_r != s_r)) || (s_f == 1)) //이전상태와 현재 상태가 다른가 혹은 전방에 벽이 갑지 되었나
+    {
+        //플래그 스위칭 0: 전진주행, 1: 회전주행 
+        if(flag == 0)
+            flag =1;
+        else
+            flag = 0;
+    }
 
-
-    if((s_l == 0)&&(s_l == 0)&&(s_l == 0)){
+    if(flag == 1) //이전상태와 현재 상태가 다른가 혹은 전방에 벽이 갑지 되었나
+    {
+        //현재상태와 다른상태가 나올때 까지 회전하기 위해 현재상태 저장
+        ns_l = s_l;
+        ns_f = s_f;
+        ns_r = s_r; 
         
+        //현재상태에 따라 좌회전 우회전 결정 기본 왼쪽 뚫려있으면 좌회전 왼쪽 박혀있고 오른쪽 뚫려있으면 우회전
+        //현재상태와 다른 상태가 나올때 까지 회전한다.
+
+        if((s_l == 1) && (s_f == 1) && (s_r == 1)) //전부 벽인가
+        {
+            Motor_right_turn();
+        }
+        else if(s_l == 0) //왼쪽이 뚫렸나 왼쪽회전
+        {  
+            Motor_left_turn();
+        }
+        else if(s_r == 0) //오른쪽이 뚫렸나 오른쪽 회전
+        {
+            Motor_right_turn();
+        }
+        return 1; //회전운동
     }
-    else if((s_l == 0)&&(s_l == 0)&&(s_l == 0)){
+    else if(flag == 0)
+    {
+        //다음 제어에 현재상태를 비교하기 위해 현재 상태를 저장한다.
+        ns_l = s_l;
+        ns_f = s_f;
+        ns_r = s_r;
 
+        if(s_l == 1)
+            return 2; //전진운동 왼쪽 보기
+        else if(s_r == 1)
+            return 3; //전진운동 오른쪽 보기
     }
-
-
-
-
-    //다음 제어에 현재상태를 비교하기 위해 현재 상태를 저장한다.
-    ns_l = s_l;
-    ns_f = s_f;
-    ns_r = s_r;
-  
-      return 0;
+    else
+        return 0;
+    return 0; 
 }
 
 //-----------------------------------------------------
@@ -334,9 +373,9 @@ void Motor_front(int left, int right)
 }
 void Motor_left_turn()
 {
-    gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
-    gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
-    usleep(10);
+//    gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
+//    gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
+//    usleep(10);
 
     set_PWM_dutycycle(pi, PWM_PIN0, spin_speed);
     set_PWM_dutycycle(pi, PWM_PIN1, spin_speed);
@@ -347,9 +386,9 @@ void Motor_left_turn()
 }
 void Motor_right_turn()
 {
-    gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
-    gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
-    usleep(10);
+//    gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
+//    gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
+//    usleep(10);
 
     set_PWM_dutycycle(pi, PWM_PIN0, spin_speed);
     set_PWM_dutycycle(pi, PWM_PIN1, spin_speed);
