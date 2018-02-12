@@ -62,7 +62,7 @@ float ref_sensor = 5.2;     //좌, 우 이격 전진 거리
 float ref_sensor_F = 15;    //정면 벽 감지 감속 시작 지점
 
 int ns_l, ns_f, ns_r;       //벽 감지 상태 저장 변수
-int flag = 0; 
+int flag = 2; 
 //-----------------------------------------------------
 //                  function set
 //-----------------------------------------------------
@@ -116,7 +116,7 @@ int main(int argc, char* argv[])
 
     //50ms제어주기의 callback함수 실행
     callback(pi,control_cycle_PIN, RISING_EDGE, cb_control);
-    time_sleep(100);
+    time_sleep(1);
 
     //start_thread(sensor,(void *)0);
 
@@ -132,31 +132,32 @@ int main(int argc, char* argv[])
 //----------------------------------------------------
 void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어주기 50ms
 {
-    if((sensor_L > 0) && (sensor_F > 0) && (sensor_R > 0))
-    {
-        s_save_L = sensor_L;
-        s_save_F = sensor_F;
-        s_save_R = sensor_R;
-    }
+    //센서 오류가 아닌 값만 사용
+    if(sensor_L > 0)    s_save_L = sensor_L;
+    if(sensor_F > 0)    s_save_F = sensor_F;
+    if(sensor_R > 0)    s_save_R = sensor_R;
+
+    c_flag = control_flag(s_save_L, s_save_F, s_save_R);
+
+    // 전진확인 제어변수 1:회전, 2:왼전진, 3:오른전진
+    //c_flag = 3;
+    printf("sensor_L : %.2f, sensor_F : %.2f, sensor_R : %.2f\n",sensor_L, sensor_F, sensor_R);
 
 
-        printf("sensor_L : %.2f, sensor_F : %.2f, sensor_R : %.2f\n",sensor_L, sensor_F, sensor_R);
-
-
-        //원하는 거리값을 맞추기위해 (설정거리 - 현재거리) 에러값 생성 
-        error_L = ref_sensor - s_save_L;
-        error_R = ref_sensor - s_save_R - 0.2;
-        error_F = ref_sensor_F - s_save_F;
-        if(error_F < 0) error_F = 0; // 정면은 설정거리부터 감속하기위해 음수 삭제
+    //원하는 거리값을 맞추기위해 (설정거리 - 현재거리) 에러값 생성 
+    error_L = ref_sensor - s_save_L;
+    error_R = ref_sensor - s_save_R - 0.2;
+    error_F = ref_sensor_F - s_save_F;
+    if(error_F < 0) error_F = 0; // 정면은 설정거리부터 감속하기위해 음수 삭제
        
 
 
-        if(c_flag == 1) //회전운동
-        {
+    if(c_flag == 1) //회전운동
+    {
 
-        }
-        else if(c_flag == 2) //전진운동 왼쪽보기
-        {
+    }
+    else if(c_flag == 2) //전진운동 왼쪽보기
+    {
 
         //확꺽어지지 안도록 제어값 제한 둬보기
 /*  
@@ -166,8 +167,8 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
             left_end = ref_speed - ref_speed*kp_f*error_F/100.0;
             if(left_end < 0) 
                 left_end = 0;
-            if(right_end < 0)
-                right_end = 0;
+            if(right_end < speed_limit - ref_speed*kp_f*error_F/100.0)   //회전 속도 감속 제한
+                right_end = speed_limit - ref_speed*kp_f*error_F/100.0;
 
         }
         else{
@@ -175,14 +176,14 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
             left_end = ref_speed + ref_speed*(kp*error_L + kd*(error_L - pre_error_L))/100.0 - ref_speed*kp_f*error_F/100.0;
             if(right_end < 0)
                 right_end = 0;
-            if(left_end < 0) 
-                left_end = 0;
+            if(left_end < speed_limit - ref_speed*kp_f*error_F/100.0)    //회전 속도 감속 제한 
+                left_end = speed_limit - ref_speed*kp_f*error_F/100.0;
 
         }
 */
-        }
-        else if(c_flag == 3) //전진운동 오른쪽보기
-        {
+    }
+    else if(c_flag == 3) //전진운동 오른쪽보기
+    {
         //controller right look 오른쪽 거리를 맞추며 전진하는 제어
         if(error_R >= 0){
             left_end = ref_speed - ref_speed*(kp_r*error_R + kd_r*(error_R - pre_error_R))/100.0 - ref_speed*kp_f*error_F/100.0; 
@@ -202,15 +203,15 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
                 right_end = speed_limit - ref_speed*kp_f*error_F/100.0;
 
         }
-        }
+    }
 
-        printf("M_L : %d, M_R : %d\n",left_end,right_end);
+    printf("M_L : %d, M_R : %d\n",left_end,right_end);
 
 
-        Motor_front(left_end,right_end);
+    Motor_front(left_end,right_end);
 
-        pre_error_L = error_L;
-        pre_error_R = error_R;
+    pre_error_L = error_L;
+    pre_error_R = error_R;
 
     
 
@@ -261,6 +262,10 @@ int control_flag(float s_l, float s_f, float s_r) //왼쪽, 정면, 오른쪽(�
         {
             Motor_right_turn();
         }
+        else if(s_l == 1)
+        {
+            return 2;
+        }
         else if(s_l == 0) //왼쪽이 뚫렸나 왼쪽회전
         {  
             Motor_left_turn();
@@ -303,7 +308,7 @@ void global_Init()
     set_PWM_dutycycle(pi, control_cycle_PIN, 1);
 
     //pwm range 1000
-//    set_PWM_frequency(pi, PWM_PIN0, 2000);
+//    set_PWM_frequency(pi, PWM_PIN0, 2000); //소리가 심함
 //    set_PWM_frequency(pi, PWM_PIN1, 2000);
     set_PWM_range(pi, PWM_PIN0, 1000);
     set_PWM_range(pi, PWM_PIN1, 1000);
