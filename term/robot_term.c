@@ -160,7 +160,7 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
     {
 
         //확꺽어지지 안도록 제어값 제한 둬보기
-/*  
+
         //controller left look 왼쪽 거리를 맞추며 전진하는 제어
         if(error_L >= 0){
             right_end = ref_speed - ref_speed*(kp*error_L + kd*(error_L - pre_error_L))/100.0 - ref_speed*kp_f*error_F/100.0; 
@@ -180,7 +180,7 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
                 left_end = speed_limit - ref_speed*kp_f*error_F/100.0;
 
         }
-*/
+
     }
     else if(c_flag == 3) //전진운동 오른쪽보기
     {
