@@ -36,7 +36,7 @@ int spin_speed  =  35;  //회전속도
 int left_end    =  0;   //왼쪽 모터 pwm값
 int right_end   =  0;   //오른쪽 모터 pwm값
 
-int c_flag      =  0;   //좌수법 알고리즘에 의한 현재상황 플래그
+int c_flag      =  2;   //좌수법 알고리즘에 의한 현재상황 플래그
 
 uint32_t start_tick_[3], dist_tick_[3];
 float sensor_L, sensor_F, sensor_R; //현재 거리값
@@ -62,7 +62,7 @@ float ref_sensor = 5.2;     //좌, 우 이격 전진 거리
 float ref_sensor_F = 15;    //정면 벽 감지 감속 시작 지점
 
 int ns_l, ns_f, ns_r;       //벽 감지 상태 저장 변수
-int flag = 2; 
+int flag = 0; 
 //-----------------------------------------------------
 //                  function set
 //-----------------------------------------------------
@@ -262,7 +262,7 @@ int control_flag(float s_l, float s_f, float s_r) //왼쪽, 정면, 오른쪽(�
         {
             Motor_right_turn();
         }
-        else if(s_l == 1)
+        else if((s_l == 1) && (s_f == 0))
         {
             return 2;
         }
