@@ -26,7 +26,7 @@
 
 #define control_cycle_PIN 12
 #define speed_limit 350
-#define spin_speed 360
+#define spin_speed 400
 //-----------------------------------------------------
 //                      global var
 //-----------------------------------------------------
@@ -37,7 +37,6 @@ int ref_speed   =  0;   //설정속도
 int left_end    =  0;   //왼쪽 모터 pwm값
 int right_end   =  0;   //오른쪽 모터 pwm값
 
-int c_flag      =  2;   //좌수법 알고리즘에 의한 현재상황 플래그
 
 uint32_t start_tick_[3], dist_tick_[3];
 float sensor_L, sensor_F, sensor_R; //현재 거리값
@@ -62,8 +61,13 @@ float pre_error_R = 0;
 float ref_sensor = 5.2;     //좌, 우 이격 전진 거리
 float ref_sensor_F = 15;    //정면 벽 감지 감속 시작 지점
 
-int ns_l, ns_f, ns_r;       //벽 감지 상태 저장 변수
+int ss_l, ss_f, ss_r;          //벽 감지 상태 현재 변수
+int ns_l, ns_f, ns_r;       //벽 감지 상태 이전 변수
 int flag = 0; 
+int c_flag      =  2;   //좌수법 알고리즘에 의한 현재상황 플래그, 0:left turn, 1:right turn 2:forword(L), 3:forword(R), others: stop
+
+int i = 0; //단순변수
+
 //-----------------------------------------------------
 //                  function set
 //-----------------------------------------------------
@@ -81,7 +85,7 @@ int control_flag(float s_l, float s_f, float s_r); //왼쪽, 정면, 오른쪽(�
 void Motor_front(int left, int right);
 void Motor_left_turn();
 void Motor_right_turn();
-void Motor_smusse_stop(int left, int right);
+void Motor_stop();
 
 void* sensor(void* arg );
 //-----------------------------------------------------
@@ -140,8 +144,8 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
 
     c_flag = control_flag(s_save_L, s_save_F, s_save_R);
 
-    // 전진확인 제어변수 1:회전, 2:왼전진, 3:오른전진
-    //c_flag = 3;
+    // 전진확인 제어변수 0:좌회전, 1:우회전, 2:왼전진, 3:오른전진, 나머지 정지
+    //c_flag 초기값 2
     printf("sensor_L : %.2f, sensor_F : %.2f, sensor_R : %.2f\n",sensor_L, sensor_F, sensor_R);
 
 
@@ -152,14 +156,21 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
     if(error_F < 0) error_F = 0; // 정면은 설정거리부터 감속하기위해 음수 삭제
        
 
+    switch(c_flag){
+    case 0: //left turn
+        pre_error_L = 0;
+        pre_error_R = 0;
+        Motor_left_turn();
+        break;
 
-    if(c_flag == 1) //회전운동
-    {
+    case 1: //right turn
+        pre_error_L = 0;
+        pre_error_R = 0;
+        Motor_right_turn();
+        break;
 
-    }
-    else if(c_flag == 2) //전진운동 왼쪽보기
-    {
-
+    case 2: //forword left
+        pre_error_R = 0;
         //확꺽어지지 안도록 제어값 제한 둬보기
 
         //controller left look 왼쪽 거리를 맞추며 전진하는 제어
@@ -170,7 +181,6 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
                 left_end = 0;
             if(right_end < speed_limit - ref_speed*kp_f*error_F/100.0)   //회전 속도 감속 제한
                 right_end = speed_limit - ref_speed*kp_f*error_F/100.0;
-
         }
         else{
             right_end = ref_speed - ref_speed*kp_f*error_F/100.0;
@@ -179,12 +189,12 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
                 right_end = 0;
             if(left_end < speed_limit - ref_speed*kp_f*error_F/100.0)    //회전 속도 감속 제한 
                 left_end = speed_limit - ref_speed*kp_f*error_F/100.0;
-
         }
+        Motor_stop(left_end,right_end);
+        break;
 
-    }
-    else if(c_flag == 3) //전진운동 오른쪽보기
-    {
+    case 3: //forword right
+        pre_error_L = 0;
         //controller right look 오른쪽 거리를 맞추며 전진하는 제어
         if(error_R >= 0){
             left_end = ref_speed - ref_speed*(kp_r*error_R + kd_r*(error_R - pre_error_R))/100.0 - ref_speed*kp_f*error_F/100.0; 
@@ -193,7 +203,6 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
                 right_end = 0;
             if(left_end < speed_limit - ref_speed*kp_f*error_F/100.0)    //회전 속도 감속 제한 
                 left_end = speed_limit - ref_speed*kp_f*error_F/100.0;
-
         }
         else{
             left_end = ref_speed - ref_speed*kp_f*error_F/100.0;
@@ -202,19 +211,26 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
                 left_end = 0;
             if(right_end < speed_limit - ref_speed*kp_f*error_F/100.0)   //회전 속도 감속 제한
                 right_end = speed_limit - ref_speed*kp_f*error_F/100.0;
-
         }
+        Motor_front(left_end,right_end);
+        break;
+
+    default: //stop
+        pre_error_L = 0;
+        pre_error_R = 0;
+        Motor_stop();
+        break;
     }
 
-    printf("M_L : %d, M_R : %d\n",left_end,right_end);
+    // 현재상태 저장
+    ns_l = ss_l;
+    ns_f = ss_f;
+    ns_r = ss_r;   
 
-
-    Motor_front(left_end,right_end);
+    printf("M_L : %d, M_R : %d, c_flag: %d \n",left_end,right_end,c_flag);
 
     pre_error_L = error_L;
     pre_error_R = error_R;
-
-    
 
 }
 
@@ -225,73 +241,62 @@ int control_flag(float s_l, float s_f, float s_r) //왼쪽, 정면, 오른쪽(�
     
     // 1 = 벽, 0 = 빈공간  12cm 이상이 측정되면 벽이아닌 비어있는 것으로 가정한다.
     if(s_l > 12)
-        s_l = 0;
+        ss_l = 0;
     else
-        s_l = 1;
+        ss_l = 1;
     
-    if(s_f > 12)
-        s_f = 0;
+    if(s_f > 8)
+        ss_f = 0;
     else
-        s_f = 1;
+        ss_f = 1;
     
     if(s_r > 12)
-        s_r = 0;
+        ss_r = 0;
     else
-        s_r = 1;
+        ss_r = 1;
+
+    //초기값 세팅
+    if(i == 0){
+        ns_l = ss_l;
+        ns_f = ss_f;
+        ns_r = ss_r;
+        i++;
+    }
 
 
-    if(((ns_l != s_l) || (ns_f != s_f) || (ns_r != s_r)) || (s_f == 1)) //이전상태와 현재 상태가 다른가 혹은 전방에 벽이 갑지 되었나
+    // 알고리즘 시작
+
+    //회전하기 전
+    if(ss_f == 1) //정면 벽 감지
     {
-        //플래그 스위칭 0: 전진주행, 1: 회전주행 
-        if(flag == 0)
-            flag =1;
+        if(ss_l == 0) //왼쪽 뚫림 좌회전
+            return 0;
+        else if(ss_r == 0) // 오른쪽 뚫림 우회전
+            return 1;
+        else if((ss_l == 1) && (ss_r == 1)) // 막다른 골목 우회전
+            return 1;
         else
-            flag = 0;
+            return 4;
     }
-
-    if(flag == 1) //이전상태와 현재 상태가 다른가 혹은 전방에 벽이 갑지 되었나
+    else if(ss_f == 0) //정면 벽 없음
     {
-        //현재상태와 다른상태가 나올때 까지 회전하기 위해 현재상태 저장
-        ns_l = s_l;
-        ns_f = s_f;
-        ns_r = s_r; 
-        
-        //현재상태에 따라 좌회전 우회전 결정 기본 왼쪽 뚫려있으면 좌회전 왼쪽 박혀있고 오른쪽 뚫려있으면 우회전
-        //현재상태와 다른 상태가 나올때 까지 회전한다.
-
-        if((s_l == 1) && (s_f == 1) && (s_r == 1)) //전부 벽인가
+        if(ns_l == 0)//전 스탭에서 왼쪽 이 뚫려있었을경우
         {
-            Motor_right_turn();
+            if(ss_r == 1)
+                return 3;
         }
-        else if((s_l == 1) && (s_f == 0))
-        {
+        if(ss_l == 0) // 왼쪽 뚫림 좌회전
+            return 0;
+        else if(ss_l == 1)// 왼쪽 벽 왼전진
             return 2;
-        }
-        else if(s_l == 0) //왼쪽이 뚫렸나 왼쪽회전
-        {  
-            Motor_left_turn();
-        }
-        else if(s_r == 0) //오른쪽이 뚫렸나 오른쪽 회전
-        {
-            Motor_right_turn();
-        }
-        return 1; //회전운동
+        else if(ss_r == 1)// 오른쪽 벽 오른 전진
+            return 3;
+        else
+            return 4;
     }
-    else if(flag == 0)
-    {
-        //다음 제어에 현재상태를 비교하기 위해 현재 상태를 저장한다.
-        ns_l = s_l;
-        ns_f = s_f;
-        ns_r = s_r;
+    //회전한 후
 
-        if(s_l == 1)
-            return 2; //전진운동 왼쪽 보기
-        else if(s_r == 1)
-            return 3; //전진운동 오른쪽 보기
-    }
-    else
-        return 0;
-    return 0; 
+    return 4;
 }
 
 //-----------------------------------------------------
@@ -403,14 +408,14 @@ void Motor_right_turn()
     gpio_write(pi, INPUT3, PI_HIGH);     gpio_write(pi, INPUT4, PI_LOW);
                
 }
-void Motor_smusse_stop(int left, int right)
+void Motor_stop()
 {
     gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
     gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
     usleep(10);
 
-    set_PWM_dutycycle(pi, PWM_PIN0, left);
-    set_PWM_dutycycle(pi, PWM_PIN1, right);
+    set_PWM_dutycycle(pi, PWM_PIN0, 0);
+    set_PWM_dutycycle(pi, PWM_PIN1, 0);
 
     gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
     gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
@@ -422,47 +427,39 @@ void* sensor(void* arg)
 
 
     while(1){
-    for(i =0; i < 3; i++)
-    {
-        start_tick_[i] = dist_tick_[i]= 0;
-       // dist_tick_[i] = 0;
-    }
-    gpio_trigger(pi, TRIG_PINN0, 10, PI_HIGH); 
-    gpio_trigger(pi, TRIG_PINN1, 10, PI_HIGH);
-    gpio_trigger(pi, TRIG_PINN2, 10, PI_HIGH);
+        for(i =0; i < 3; i++)
+        {
+            start_tick_[i] = dist_tick_[i]= 0;
+        }
+        gpio_trigger(pi, TRIG_PINN0, 10, PI_HIGH); 
+        gpio_trigger(pi, TRIG_PINN1, 10, PI_HIGH);
+        gpio_trigger(pi, TRIG_PINN2, 10, PI_HIGH);
 
-    time_sleep(0.03);
+        time_sleep(0.03);
 
-    if(dist_tick_[0] && start_tick_[0]){
-        sensor_L = dist_tick_[0] / 1000000. * 340 / 2 * 100;
-        if(sensor_L < 2 || sensor_L > 400)
-            sensor_L = - 2;
-    }
-    else
-        sensor_L = -1;
+        if(dist_tick_[0] && start_tick_[0]){
+            sensor_L = dist_tick_[0] / 1000000. * 340 / 2 * 100;
+            if(sensor_L < 2 || sensor_L > 400)
+                sensor_L = - 2;
+        }
+        else
+            sensor_L = -1;
     
-    if(dist_tick_[1] && start_tick_[1]){
-        sensor_F = dist_tick_[1] / 1000000. * 340 / 2 * 100;
-        if(sensor_F < 2 || sensor_F > 400)
-            sensor_F = - 2;
-    }
-    else
-        sensor_F = -1;
+        if(dist_tick_[1] && start_tick_[1]){
+            sensor_F = dist_tick_[1] / 1000000. * 340 / 2 * 100;
+            if(sensor_F < 2 || sensor_F > 400)
+                sensor_F = - 2;
+        }
+        else
+            sensor_F = -1;
     
-    if(dist_tick_[2] && start_tick_[2]){
-        sensor_R = dist_tick_[2] / 1000000. * 340 / 2 * 100;
-        if(sensor_R < 2 || sensor_R > 400)
-            sensor_R = - 2;
-    }
-    else
-        sensor_R = -1;
+        if(dist_tick_[2] && start_tick_[2]){
+            sensor_R = dist_tick_[2] / 1000000. * 340 / 2 * 100;
+            if(sensor_R < 2 || sensor_R > 400)
+                sensor_R = - 2;
+        }
+        else
+            sensor_R = -1;
     // -1 sensor error, -2 range_error
-//    printf("sensor");
     }
 }
-
-
-
-
-
-
