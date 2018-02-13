@@ -26,7 +26,7 @@
 
 #define control_cycle_PIN 12
 #define speed_limit 350
-#define spin_speed 350
+#define spin_speed 360
 //-----------------------------------------------------
 //                      global var
 //-----------------------------------------------------
