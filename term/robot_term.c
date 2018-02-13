@@ -3,6 +3,7 @@
 #include <termios.h>
 #include <stdlib.h>
 #include <pigpiod_if2.h>
+
 //-----------------------------------------------------
 //                      define
 //-----------------------------------------------------
@@ -25,14 +26,14 @@
 
 #define control_cycle_PIN 12
 #define speed_limit 350
-
+#define spin_speed 350
 //-----------------------------------------------------
 //                      global var
 //-----------------------------------------------------
 int pi;
 
 int ref_speed   =  0;   //설정속도
-int spin_speed  =  35;  //회전속도
+
 int left_end    =  0;   //왼쪽 모터 pwm값
 int right_end   =  0;   //오른쪽 모터 pwm값
 
