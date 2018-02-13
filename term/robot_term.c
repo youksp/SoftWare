@@ -190,7 +190,7 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
             if(left_end < speed_limit - ref_speed*kp_f*error_F/100.0)    //회전 속도 감속 제한 
                 left_end = speed_limit - ref_speed*kp_f*error_F/100.0;
         }
-        Motor_stop(left_end,right_end);
+        Motor_front(left_end,right_end);
         break;
 
     case 3: //forword right
