@@ -25,8 +25,8 @@
 #define ECHO_PINN2 21
 
 #define control_cycle_PIN 12
-#define speed_limit 350
-#define spin_speed 400
+#define speed_limit 400
+#define spin_speed 500
 //-----------------------------------------------------
 //                      global var
 //-----------------------------------------------------
@@ -46,19 +46,19 @@ float error_L = 0;
 float error_R = 0;
 float error_F = 0;
 
-float kp = 10.5;    //왼쪽 모터 게인값
-float kd = 2;
+float kp = 3.0;    //왼쪽 모터 게인값
+float kd = 10;
 
-float kp_r = 9;     //오른쪽 모터 게인값
-float kd_r = 10;
+float kp_r = 10;     //오른쪽 모터 게인값
+float kd_r = 1;
 
-float kp_f = 8;     //정면 게인값
+float kp_f = 5;     //정면 게인값
 
 float pre_error_L = 0;  //
 float pre_error_R = 0;
 
 
-float ref_sensor = 5.2;     //좌, 우 이격 전진 거리
+float ref_sensor = 9;     //좌, 우 이격 전진 거리
 float ref_sensor_F = 15;    //정면 벽 감지 감속 시작 지점
 
 int ss_l, ss_f, ss_r;          //벽 감지 상태 현재 변수
@@ -85,6 +85,7 @@ int control_flag(float s_l, float s_f, float s_r); //왼쪽, 정면, 오른쪽(�
 void Motor_front(int left, int right);
 void Motor_left_turn();
 void Motor_right_turn();
+void Motor_back();
 void Motor_stop();
 
 void* sensor(void* arg );
@@ -175,12 +176,14 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
 
         //controller left look 왼쪽 거리를 맞추며 전진하는 제어
         if(error_L >= 0){
-            right_end = ref_speed - ref_speed*(kp*error_L + kd*(error_L - pre_error_L))/100.0 - ref_speed*kp_f*error_F/100.0; 
+            right_end = ref_speed - ref_speed*(kp*error_L + kd*(error_L - pre_error_L))/100.0 - ref_speed*kp_f*error_F/100.0 -50; 
             left_end = ref_speed - ref_speed*kp_f*error_F/100.0;
             if(left_end < 0) 
                 left_end = 0;
-            if(right_end < speed_limit - ref_speed*kp_f*error_F/100.0)   //회전 속도 감속 제한
-                right_end = speed_limit - ref_speed*kp_f*error_F/100.0;
+            if(right_end < speed_limit -100 - ref_speed*kp_f*error_F/100.0)   //회전 속도 감속 제한
+                right_end = speed_limit -100 - ref_speed*kp_f*error_F/100.0;
+            if(right_end > ref_speed)
+                right_end = ref_speed;
         }
         else{
             right_end = ref_speed - ref_speed*kp_f*error_F/100.0;
@@ -189,6 +192,8 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
                 right_end = 0;
             if(left_end < speed_limit - ref_speed*kp_f*error_F/100.0)    //회전 속도 감속 제한 
                 left_end = speed_limit - ref_speed*kp_f*error_F/100.0;
+            if(left_end > ref_speed)
+                left_end = ref_speed;
         }
         Motor_front(left_end,right_end);
         break;
@@ -215,6 +220,12 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
         Motor_front(left_end,right_end);
         break;
 
+    case 4:
+        pre_error_L = 0;
+        pre_error_R = 0;
+        Motor_back();
+        break;
+
     default: //stop
         pre_error_L = 0;
         pre_error_R = 0;
@@ -227,7 +238,7 @@ void cb_control(int pi, unsigned gpio, unsigned level, uint32_t tick) //제어�
     ns_f = ss_f;
     ns_r = ss_r;   
 
-    printf("M_L : %d, M_R : %d, c_flag: %d \n",left_end,right_end,c_flag);
+    printf("error: %.2f,  M_L : %d, M_R : %d, c_flag: %d \n",error_L,left_end,right_end,c_flag);
 
     pre_error_L = error_L;
     pre_error_R = error_R;
@@ -239,64 +250,51 @@ int control_flag(float s_l, float s_f, float s_r) //왼쪽, 정면, 오른쪽(�
 {
     // 좌수법 알고리즘
     
-    // 1 = 벽, 0 = 빈공간  12cm 이상이 측정되면 벽이아닌 비어있는 것으로 가정한다.
-    if(s_l > 12)
-        ss_l = 0;
-    else
-        ss_l = 1;
-    
-    if(s_f > 8)
-        ss_f = 0;
-    else
-        ss_f = 1;
-    
-    if(s_r > 12)
-        ss_r = 0;
-    else
-        ss_r = 1;
 
-    //초기값 세팅
-    if(i == 0){
-        ns_l = ss_l;
-        ns_f = ss_f;
-        ns_r = ss_r;
-        i++;
-    }
-
-
-    // 알고리즘 시작
-
-    //회전하기 전
-    if(ss_f == 1) //정면 벽 감지
+   
+    // 전진확인 제어변수 0:좌회전, 1:우회전, 2:왼전진, 3:오른전진, 4:후진  나머지 정지
+    if(s_f < 12) // 정면 벽감지 8cm 이하
     {
-        if(ss_l == 0) //왼쪽 뚫림 좌회전
-            return 0;
-        else if(ss_r == 0) // 오른쪽 뚫림 우회전
+        Motor_stop(); //일단 스톱
+        flag = 1;
+        if(s_l < 30)
+            return 1; //우회전
+        else if(s_r < 30) 
+            return 0; //좌회전
+        else if((s_l > 30) && (s_r > 30))
             return 1;
-        else if((ss_l == 1) && (ss_r == 1)) // 막다른 골목 우회전
-            return 1;
-        else
-            return 4;
-    }
-    else if(ss_f == 0) //정면 벽 없음
-    {
-        if(ns_l == 0)//전 스탭에서 왼쪽 이 뚫려있었을경우
-        {
-            if(ss_r == 1)
-                return 3;
-        }
-        if(ss_l == 0) // 왼쪽 뚫림 좌회전
-            return 0;
-        else if(ss_l == 1)// 왼쪽 벽 왼전진
-            return 2;
-        else if(ss_r == 1)// 오른쪽 벽 오른 전진
-            return 3;
-        else
-            return 4;
-    }
-    //회전한 후
 
-    return 4;
+    }
+    else if((s_f >= 8) && (s_f < 20) && (flag == 1))
+    {
+        if(s_l < 30)
+            return 1; //우회전
+        else if(s_r < 30) 
+            return 0; //좌회전
+    }
+    else if(s_f < 3)
+    {
+        return 4;
+    }
+    else if(s_l < 3)
+    {
+        return 4;   
+    }   
+    else //벽 없음 8cm 이상
+    {
+        flag = 0;
+        if(s_l < 30)
+            return 2; //좌전진
+        else if(s_r < 30)
+            return 3; // 우전진
+        else if((s_l > 30) && (s_r > 30))
+            return 5;
+    }
+
+    return 5;
+
+
+
 }
 
 //-----------------------------------------------------
@@ -420,7 +418,19 @@ void Motor_stop()
     gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
     gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
 }
+void Motor_back()
+{
+//    gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_LOW);
+//    gpio_write(pi, INPUT3, PI_LOW);     gpio_write(pi, INPUT4, PI_LOW);
+//    usleep(10);
 
+    set_PWM_dutycycle(pi, PWM_PIN0, 300);
+    set_PWM_dutycycle(pi, PWM_PIN1, 300);
+
+    gpio_write(pi, INPUT1, PI_LOW);     gpio_write(pi, INPUT2, PI_HIGH);
+    gpio_write(pi, INPUT3, PI_HIGH);     gpio_write(pi, INPUT4, PI_LOW);
+               
+}
 void* sensor(void* arg)
 {
     int i;
